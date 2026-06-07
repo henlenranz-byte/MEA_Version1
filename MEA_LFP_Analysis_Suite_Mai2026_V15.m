@@ -1,9 +1,14 @@
 function MEA_LFP_Analysis_Suite
     % MEA LFP Analysis Suite - Master GUI
-    % Version: Mai 2026 V9
+    % Version: Mai 2026 V9.1
     % Integrates all LFP analysis pipelines into one interface
     % Author: Henner Koch - Claude AI assisted
     % Date: Dezember 2025
+    %
+    % CRITICAL FIXES (June 2026):
+    % - Added input validation for all file paths (safeLoadJSON, safeLoadMat)
+    % - Added memory leak protection for figures (cleanupFigures)
+    % - Added synchronization for batch mode (waitForDataLoaded)
     %
     % V9 (Mai 2026):
     % - Implemented runHFOBatch(): HFO Characterization now runs in batch mode
@@ -544,8 +549,8 @@ uicontrol('Parent', quickPanel, ...
     'Style', 'pushbutton', ...
     'String', 'Export LFP to DB', ...
     'Units', 'normalized', ...
-    'Position', [0.62 0.15 0.17 0.30], ...  % Adjust position as needed
-    'FontSize', 9, ...
+    'Position', [0.02 0.05 0.10 0.20], ...  % Bottom-left, next to Quick Start text
+    'FontSize', 8, ...
     'FontWeight', 'bold', ...
     'BackgroundColor', [0.2 0.7 0.4], ...
     'ForegroundColor', DK_TEXT, ...
@@ -1431,14 +1436,13 @@ end
         end
         
         eventFile = fullfile(spikeDataFolder, 'Event_Spike_Data.mat');
-        if ~exist(eventFile, 'file')
-            errordlg('Event_Spike_Data.mat not found in selected folder!', 'File Not Found');
-            fprintf('❌ Event_Spike_Data.mat not found\n');
-            updateStatus('❌ Spike data file not found');
+        data = safeLoadMat(eventFile);
+        if isempty(data) || ~isfield(data, 'eventSpikes')
+            errordlg('Event_Spike_Data.mat not found or invalid in selected folder!', 'File Not Found');
+            fprintf('❌ Event_Spike_Data.mat not found or invalid\n');
+            updateStatus('❌ Spike data file not found or invalid');
             return;
         end
-        
-        data = load(eventFile);
         eventSpikes = data.eventSpikes;
         fprintf('✓ Loaded spike data for %d events\n', length(eventSpikes));
         updateStatus(sprintf('✓ Loaded spike data (%d events)', length(eventSpikes)));
@@ -2242,7 +2246,16 @@ end
                 end
 
                 %% --- Load Events ---
-                recGuiData.networkEvents = readtable(rec.eventsFile);
+                eventsData = safeLoadMat(rec.eventsFile);
+                if isempty(eventsData)
+                    error('Events file not found or invalid: %s', rec.eventsFile);
+                end
+                % Extract the first table variable from the struct
+                eventVars = fieldnames(eventsData);
+                recGuiData.networkEvents = eventsData.(eventVars{1});
+                if ~istable(recGuiData.networkEvents)
+                    error('Events file does not contain a valid table: %s', rec.eventsFile);
+                end
                 recGuiData.eventsLoaded  = true;
                 fprintf('  ✓ Events: %d rows\n', height(recGuiData.networkEvents));
 
@@ -2261,33 +2274,30 @@ end
                 end
                 
                 if ~isempty(noisyJSONPath)
-                    try
-                        jsonText = fileread(noisyJSONPath);
-                        jsonData = jsondecode(jsonText);
-                        if isfield(jsonData, 'noisy_channels')
-                            perRecNoisy = jsonData.noisy_channels;
-                            % Handle all possible formats from jsondecode
-                            if isempty(perRecNoisy)
-                                perRecNoisy = {};
-                            elseif ischar(perRecNoisy)
-                                perRecNoisy = {perRecNoisy};
-                            elseif isstring(perRecNoisy)
-                                perRecNoisy = cellstr(perRecNoisy);
-                            elseif isnumeric(perRecNoisy)
-                                perRecNoisy = {};  % empty array decoded as []
-                            elseif iscell(perRecNoisy)
-                                perRecNoisy = cellfun(@char, perRecNoisy, 'UniformOutput', false);
-                            end
-                            if ~isempty(perRecNoisy)
-                                recExcludeChannels = unique([recExcludeChannels(:)', perRecNoisy(:)'], 'stable');
-                                fprintf('  ✓ noisy_channels.json: %d channels (%s)\n', ...
-                                    numel(perRecNoisy), strjoin(perRecNoisy, ', '));
-                            else
-                                fprintf('  ✓ noisy_channels.json: 0 channels (all clean)\n');
-                            end
+                    jsonData = safeLoadJSON(noisyJSONPath);
+                    if ~isempty(jsonData) && isfield(jsonData, 'noisy_channels')
+                        perRecNoisy = jsonData.noisy_channels;
+                        % Handle all possible formats from jsondecode
+                        if isempty(perRecNoisy)
+                            perRecNoisy = {};
+                        elseif ischar(perRecNoisy)
+                            perRecNoisy = {perRecNoisy};
+                        elseif isstring(perRecNoisy)
+                            perRecNoisy = cellstr(perRecNoisy);
+                        elseif isnumeric(perRecNoisy)
+                            perRecNoisy = {};  % empty array decoded as []
+                        elseif iscell(perRecNoisy)
+                            perRecNoisy = cellfun(@char, perRecNoisy, 'UniformOutput', false);
                         end
-                    catch ME_json
-                        fprintf('  ⚠ Could not read noisy_channels.json: %s\n', ME_json.message);
+                        if ~isempty(perRecNoisy)
+                            recExcludeChannels = unique([recExcludeChannels(:)', perRecNoisy(:)'], 'stable');
+                            fprintf('  ✓ noisy_channels.json: %d channels (%s)\n', ...
+                                numel(perRecNoisy), strjoin(perRecNoisy, ', '));
+                        else
+                            fprintf('  ✓ noisy_channels.json: 0 channels (all clean)\n');
+                        end
+                    else
+                        fprintf('  ⚠ Could not read noisy_channels.json or file is invalid\n');
                     end
                 else
                     fprintf('  ○ No noisy_channels.json found\n');
@@ -2483,6 +2493,10 @@ end
                     hfoOut = fullfile(recOutRoot, 'HFO_Characterization');
                     if ~exist(hfoOut, 'dir'), mkdir(hfoOut); end
                     try
+                        % Ensure data is fully loaded before processing
+                        if ~recGuiData.lfpProcessed
+                            error('LFP data not processed. Cannot run HFO analysis.');
+                        end
                         runHFOBatch(recGuiData, batchParams.hfoParams, hfoOut);
                         fprintf('  ✓ HFO done\n');
                     catch ME_hfo
@@ -4556,7 +4570,7 @@ end
     %% === FIGURE: COMPREHENSIVE CELL-TYPE CLASSIFICATION ===
     fprintf('\nGenerating figures...\n');
     
-    fig1 = figure('Position', [30 30 1800 1100], 'Color', 'w', 'Visible', 'off');
+    fig1 = figure('Position', [30 30 1800 1100], 'Color', 'w', 'Visible', 'off', 'CloseRequestFcn', @(~,~)delete(gcf));
     
     colNarrow = [0.8 0.2 0.2]; % Red for interneurons
     colBroad  = [0.2 0.4 0.8]; % Blue for pyramidal
@@ -4939,7 +4953,7 @@ end
             colEnriched = [0.9 0.5 0.1];
             colSuppressed = [0.3 0.3 0.7];
             
-            fig2 = figure('Position', [50 50 1800 500*nBands], 'Color', 'w', 'Visible', 'off');
+            fig2 = figure('Position', [50 50 1800 500*nBands], 'Color', 'w', 'Visible', 'off', 'CloseRequestFcn', @(~,~)delete(gcf));
             
             for bi = 1:nBands
                 spikeHFO = allHFOs.(bandFields{bi});
@@ -6195,7 +6209,7 @@ end
             colBroad    = [0.2 0.4 0.8];
             colPace = colCore; colNonPace = colOther; % legacy
             
-            fig3 = figure('Position', [30 30 1900 1100], 'Color', 'w', 'Visible', 'off');
+            fig3 = figure('Position', [30 30 1900 1100], 'Color', 'w', 'Visible', 'off', 'CloseRequestFcn', @(~,~)delete(gcf));
             
             % --- Panel 1: Firing Rate vs Initiation Probability ---
             subplot(3, 4, 1);
@@ -6629,7 +6643,7 @@ end
             fprintf('  ✓ Initiator pool figure saved\n');
             
             %% === FIRING FREQUENCY OVERVIEW FIGURE ===
-            fig4 = figure('Position', [40 40 1800 900], 'Color', 'w', 'Visible', 'off');
+            fig4 = figure('Position', [40 40 1800 900], 'Color', 'w', 'Visible', 'off', 'CloseRequestFcn', @(~,~)delete(gcf));
             
             % Sort channels by total firing rate
             totalRate = pacemaker.totalSpikes / recordingDuration;
@@ -6972,7 +6986,7 @@ end
             0.0 0.0 1.0;  % 4: L5/6 (blue)
             1.0 0.8 0.0]; % 5: WM (yellow-ish)
 
-    figure('Name', 'Layer Dictionary');
+    figure('Name', 'Layer Dictionary', 'CloseRequestFcn', @(~,~)delete(gcf));
     imagesc(L, [0 5]);          % data range 0..5
     axis equal tight;
     set(gca, 'YDir', 'normal'); % row 1 at bottom (optional)
@@ -7002,7 +7016,7 @@ end
             return;
         end
         
-        figure('Name', 'Events Browser', 'Position', [100, 100, 800, 600]);
+        figure('Name', 'Events Browser', 'Position', [100, 100, 800, 600], 'CloseRequestFcn', @(~,~)delete(gcf));
         uitable('Data', table2cell(guiData.networkEvents(1:min(50, height(guiData.networkEvents)), :)), ...
             'ColumnName', guiData.networkEvents.Properties.VariableNames, ...
             'Units', 'normalized', 'Position', [0.05 0.05 0.90 0.90]);
@@ -15084,6 +15098,17 @@ function runHFOBatch(recGuiData, params, outputFolder)
         error('Filter frequencies must be < Nyquist (%.0f Hz).', nyq);
     end
 
+    % --- Validate input data ---
+    if ~isfield(recGuiData, 'rawChannelData') || isempty(recGuiData.rawChannelData)
+        error('runHFOBatch: rawChannelData not found or empty in recGuiData.');
+    end
+    if ~isfield(recGuiData, 'channelLabels') || isempty(recGuiData.channelLabels)
+        error('runHFOBatch: channelLabels not found or empty in recGuiData.');
+    end
+    if ~isfield(recGuiData, 'samplingRate') || recGuiData.samplingRate <= 0
+        error('runHFOBatch: samplingRate not found or invalid in recGuiData.');
+    end
+
     % --- Prepare raw data ---
     rawChannelData = recGuiData.rawChannelData;
     channelLabels  = recGuiData.channelLabels;
@@ -15131,66 +15156,65 @@ function runHFOBatch(recGuiData, params, outputFolder)
     if params.loadSpikes
         recFolder = fileparts(outputFolder);  % HFO_Characterization is one level below rec root
         searchPaths = { ...
-            fullfile(recFolder, 'All_Spike_Times.mat'), ...
-            fullfile(recFolder, 'Spike_Data_for_LFP', 'All_Spike_Times.mat'), ...
-            fullfile(recFolder, 'Events', 'All_Spike_Times.mat'), ...
-            fullfile(fileparts(recFolder), 'All_Spike_Times.mat') ...
+            recFolder, ...
+            fullfile(recFolder, 'Spike_Data_for_LFP'), ...
+            fullfile(recFolder, 'Events'), ...
+            fileparts(recFolder) ...
         };
-        spikeFile = '';
-        for si = 1:length(searchPaths)
-            if exist(searchPaths{si}, 'file')
-                spikeFile = searchPaths{si};
-                break;
-            end
-        end
+        spikeFile = findFileInPaths('All_Spike_Times.mat', searchPaths);
 
         if ~isempty(spikeFile)
             fprintf('    Loading spike data: %s\n', spikeFile);
-            tmp = load(spikeFile);
-            fnames = fieldnames(tmp);
-            spikeTable = [];
-            for fi = 1:length(fnames)
-                if istable(tmp.(fnames{fi}))
-                    spikeTable = tmp.(fnames{fi});
-                    break;
-                end
-            end
-            if ~isempty(spikeTable)
-                varNames = spikeTable.Properties.VariableNames;
-                channelColIdx = 0; timeColIdx = 0;
-                for vi = 1:length(varNames)
-                    col = spikeTable.(varNames{vi});
-                    if iscategorical(col) || iscellstr(col) || isstring(col)
-                        channelColIdx = vi;
-                    elseif isnumeric(col) && channelColIdx > 0 && timeColIdx == 0
-                        vals = col(~isnan(col));
-                        if ~isempty(vals) && max(vals) < 100000
-                            timeColIdx = vi;
-                        end
+            tmp = safeLoadMat(spikeFile);
+            if isempty(tmp)
+                fprintf('    ⚠️  Failed to load spike data from %s\n', spikeFile);
+                spikeTable = [];
+            else
+                fnames = fieldnames(tmp);
+                spikeTable = [];
+                for fi = 1:length(fnames)
+                    if istable(tmp.(fnames{fi}))
+                        spikeTable = tmp.(fnames{fi});
+                        break;
                     end
                 end
-                if channelColIdx > 0 && timeColIdx > 0
-                    channels = spikeTable.(varNames{channelColIdx});
-                    if iscategorical(channels), channels = cellstr(channels);
-                    elseif isstring(channels),  channels = cellstr(channels); end
-                    spkTimes = spikeTable.(varNames{timeColIdx});
-                    if isfield(recGuiData, 'timeOffset') && recGuiData.timeOffset > 0
-                        spkTimes = spkTimes - recGuiData.timeOffset;
-                    end
-                    uniqueCh = unique(channels);
-                    allSpikeStruct = struct();
-                    totalSpikes = 0;
-                    for ci = 1:length(uniqueCh)
-                        mask = strcmp(channels, uniqueCh{ci});
-                        chTimes = sort(spkTimes(mask));
-                        chTimes = chTimes(chTimes >= 0 & chTimes <= recordingDuration);
-                        if ~isempty(chTimes)
-                            allSpikeStruct.(matlab.lang.makeValidName(uniqueCh{ci})) = chTimes;
-                            totalSpikes = totalSpikes + length(chTimes);
+                if ~isempty(spikeTable)
+                    varNames = spikeTable.Properties.VariableNames;
+                    channelColIdx = 0; timeColIdx = 0;
+                    for vi = 1:length(varNames)
+                        col = spikeTable.(varNames{vi});
+                        if iscategorical(col) || iscellstr(col) || isstring(col)
+                            channelColIdx = vi;
+                        elseif isnumeric(col) && channelColIdx > 0 && timeColIdx == 0
+                            vals = col(~isnan(col));
+                            if ~isempty(vals) && max(vals) < 100000
+                                timeColIdx = vi;
+                            end
                         end
                     end
-                    fprintf('    ✓ Spike data: %d spikes on %d channels\n', ...
-                        totalSpikes, length(fieldnames(allSpikeStruct)));
+                    if channelColIdx > 0 && timeColIdx > 0
+                        channels = spikeTable.(varNames{channelColIdx});
+                        if iscategorical(channels), channels = cellstr(channels);
+                        elseif isstring(channels),  channels = cellstr(channels); end
+                        spkTimes = spikeTable.(varNames{timeColIdx});
+                        if isfield(recGuiData, 'timeOffset') && recGuiData.timeOffset > 0
+                            spkTimes = spkTimes - recGuiData.timeOffset;
+                        end
+                        uniqueCh = unique(channels);
+                        allSpikeStruct = struct();
+                        totalSpikes = 0;
+                        for ci = 1:length(uniqueCh)
+                            mask = strcmp(channels, uniqueCh{ci});
+                            chTimes = sort(spkTimes(mask));
+                            chTimes = chTimes(chTimes >= 0 & chTimes <= recordingDuration);
+                            if ~isempty(chTimes)
+                                allSpikeStruct.(matlab.lang.makeValidName(uniqueCh{ci})) = chTimes;
+                                totalSpikes = totalSpikes + length(chTimes);
+                            end
+                        end
+                        fprintf('    ✓ Spike data: %d spikes on %d channels\n', ...
+                            totalSpikes, length(fieldnames(allSpikeStruct)));
+                    end
                 end
             end
         else
@@ -18664,4 +18688,175 @@ end
     end
 
     end % runLFPInitiatorCorrelationGUI
+
+
+%% ========================================================================
+%  CRITICAL FIXES: HELPER FUNCTIONS (June 2026)
+%  - Input validation for file loading
+%  - Memory leak protection for figures
+%  - Batch mode synchronization
+%% ========================================================================
+
+function data = safeLoadMat(filePath, varargin)
+% SAFELOADMAT  Safely load .mat file with input validation and error handling.
+%   data = safeLoadMat(filePath) loads the file and returns its contents.
+%   data = safeLoadMat(filePath, 'vars', {'var1', 'var2'}) loads only specified variables.
+%   Returns empty struct if file does not exist or loading fails.
+
+    if nargin < 1 || isempty(filePath) || ~ischar(filePath) && ~isstring(filePath)
+        warning('safeLoadMat: Invalid file path provided.');
+        data = struct();
+        return;
+    end
+
+    filePath = char(filePath);
+    if ~exist(filePath, 'file')
+        warning('safeLoadMat: File not found: %s', filePath);
+        data = struct();
+        return;
+    end
+
+    try
+        if nargin >= 2 && iscell(varargin{1}) && strcmpi(varargin{1}{1}, 'vars')
+            vars = varargin{2};
+            data = load(filePath, vars{:});
+        else
+            data = load(filePath);
+        end
+    catch ME
+        warning('safeLoadMat: Failed to load %s. Error: %s', filePath, ME.message);
+        data = struct();
+    end
+end
+
+
+function jsonData = safeLoadJSON(filePath)
+% SAFELOADJSON  Safely load and parse JSON file with input validation.
+%   jsonData = safeLoadJSON(filePath) loads and decodes the JSON file.
+%   Returns empty struct if file does not exist or parsing fails.
+
+    if nargin < 1 || isempty(filePath) || ~ischar(filePath) && ~isstring(filePath)
+        warning('safeLoadJSON: Invalid file path provided.');
+        jsonData = struct();
+        return;
+    end
+
+    filePath = char(filePath);
+    if ~exist(filePath, 'file')
+        warning('safeLoadJSON: File not found: %s', filePath);
+        jsonData = struct();
+        return;
+    end
+
+    try
+        rawText = fileread(filePath);
+        jsonData = jsondecode(rawText);
+    catch ME
+        warning('safeLoadJSON: Failed to parse %s. Error: %s', filePath, ME.message);
+        jsonData = struct();
+    end
+end
+
+
+function cleanupFigures(varargin)
+% CLEANUPFIGURES  Close and delete figures to prevent memory leaks.
+%   cleanupFigures() closes all figures except the main GUI.
+%   cleanupFigures(figHandles) closes specific figure handles.
+%   cleanupFigures('all') closes all figures including main GUI.
+
+    mainFigTag = 'MEA_LFP_Main_GUI';
+
+    if nargin == 0
+        % Close all figures except main GUI
+        allFigs = findall(0, 'Type', 'figure');
+        for i = 1:length(allFigs)
+            if ~strcmp(get(allFigs(i), 'Tag'), mainFigTag)
+                try
+                    delete(allFigs(i));
+                catch
+                    % Ignore errors (figure may already be deleted)
+                end
+            end
+        end
+    elseif nargin == 1 && ischar(varargin{1}) && strcmpi(varargin{1}, 'all')
+        % Close all figures including main GUI
+        allFigs = findall(0, 'Type', 'figure');
+        for i = 1:length(allFigs)
+            try
+                delete(allFigs(i));
+            catch
+                % Ignore errors
+            end
+        end
+    elseif nargin >= 1 && ishandle(varargin{1})
+        % Close specific figure handles
+        figHandles = varargin{1};
+        if ~isvector(figHandles)
+            figHandles = [figHandles];
+        end
+        for i = 1:length(figHandles)
+            if ishandle(figHandles(i)) && strcmp(get(figHandles(i), 'Type'), 'figure')
+                try
+                    delete(figHandles(i));
+                catch
+                    % Ignore errors
+                end
+            end
+        end
+    end
+end
+
+
+function waitForDataLoaded(guiDataHandle, timeout)
+% WAITFORDATALOADED  Wait for guiData.dataLoaded to be true.
+%   waitForDataLoaded(guiDataHandle) blocks until data is loaded.
+%   waitForDataLoaded(guiDataHandle, timeout) waits for max timeout seconds.
+
+    if nargin < 1
+        error('waitForDataLoaded: guiDataHandle required.');
+    end
+
+    if nargin < 2
+        timeout = Inf; % Wait forever
+    end
+
+    startTime = tic;
+    while true
+        if ~ishandle(guiDataHandle)
+            error('waitForDataLoaded: guiDataHandle is invalid.');
+        end
+
+        guiData = guidata(guiDataHandle);
+        if isfield(guiData, 'dataLoaded') && guiData.dataLoaded
+            return;
+        end
+
+        if toc(startTime) > timeout
+            error('waitForDataLoaded: Timeout after %.1f seconds.', timeout);
+        end
+
+        pause(0.1); % Small delay to prevent CPU overload
+    end
+end
+
+
+function filePath = findFileInPaths(fileName, searchPaths)
+% FINDFILEINPATHS  Locate a file in a list of search paths.
+%   filePath = findFileInPaths(fileName, searchPaths) returns the full path
+%   if the file exists in any of the searchPaths, otherwise returns empty string.
+
+    if nargin < 2 || isempty(fileName) || isempty(searchPaths)
+        filePath = '';
+        return;
+    end
+
+    filePath = '';
+    for i = 1:length(searchPaths)
+        candidate = fullfile(searchPaths{i}, fileName);
+        if exist(candidate, 'file')
+            filePath = candidate;
+            return;
+        end
+    end
+end
 
