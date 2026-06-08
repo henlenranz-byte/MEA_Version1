@@ -20,11 +20,24 @@ function MEA_GUI_WithWorkingH5()
     %           - Velocity Distribution: excludes near-zero artifacts, cleaner annotations
     %           - Summary Panel: cleaner layout with integrated legend
     %
+    % ==================== DARK THEME COLORS ====================
+    darkBgColor = [0.15, 0.15, 0.15];      % Figure background
+    darkPanelColor = [0.25, 0.25, 0.25];   % Panel background
+    darkTextColor = [0.9, 0.9, 0.9];        % Text color (light gray)
+    darkButtonColor = [0.3, 0.3, 0.3];      % Button background
+    darkButtonTextColor = [1, 1, 1];        % Button text color (white)
+    darkEditColor = [0.3, 0.3, 0.3];        % Edit field background
+    darkEditTextColor = [1, 1, 1];          % Edit field text color
+    darkAxesColor = [0.1, 0.1, 0.1];        % Axes background
+    darkAxesTextColor = [0.7, 0.7, 0.7];    % Axes text/grid color
+
     % Create main figure
     fig = figure('Name', 'MEA Analysis Suite - Complete Version', ...
                  'Position', [50, 50, 1400, 800], ...
                  'MenuBar', 'none', ...
-                 'NumberTitle', 'off');
+                 'NumberTitle', 'off', ...
+                 'Color', darkBgColor, ...
+                 'InvertHardcopy', 'off');
     
     % Initialize data storage
     setappdata(fig, 'channelData', []);
@@ -49,29 +62,40 @@ function MEA_GUI_WithWorkingH5()
     % Create panels
     controlPanel = uipanel('Parent', fig, ...
                           'Title', 'Controls', ...
-                          'Position', [0.01, 0.5, 0.25, 0.49]);
+                          'Position', [0.01, 0.5, 0.25, 0.49], ...
+                          'BackgroundColor', darkPanelColor, ...
+                          'ForegroundColor', darkTextColor);
     
     paramPanel = uipanel('Parent', fig, ...
                         'Title', 'Spike Detection Parameters', ...
-                        'Position', [0.27, 0.7, 0.25, 0.29]);
+                        'Position', [0.27, 0.7, 0.25, 0.29], ...
+                        'BackgroundColor', darkPanelColor, ...
+                        'ForegroundColor', darkTextColor);
     
     eventParamPanel = uipanel('Parent', fig, ...
                              'Title', 'Event Detection Parameters', ...
-                             'Position', [0.27, 0.5, 0.25, 0.19]);
+                             'Position', [0.27, 0.5, 0.25, 0.19], ...
+                             'BackgroundColor', darkPanelColor, ...
+                             'ForegroundColor', darkTextColor);
     
     % NEW: Current Settings Display Panel
     settingsDisplayPanel = uipanel('Parent', fig, ...
                                    'Title', 'Current Settings', ...
                                    'Position', [0.53, 0.80, 0.46, 0.19], ...
-                                   'ForegroundColor', [0 0.4 0.8]);
+                                   'BackgroundColor', darkPanelColor, ...
+                                   'ForegroundColor', darkTextColor);
     
     statusPanel = uipanel('Parent', fig, ...
                          'Title', 'Status Log', ...
-                         'Position', [0.53, 0.5, 0.46, 0.29]);
+                         'Position', [0.53, 0.5, 0.46, 0.29], ...
+                         'BackgroundColor', darkPanelColor, ...
+                         'ForegroundColor', darkTextColor);
     
     vizPanel = uipanel('Parent', fig, ...
                        'Title', 'Visualization', ...
-                       'Position', [0.01, 0.01, 0.98, 0.48]);
+                       'Position', [0.01, 0.01, 0.98, 0.48], ...
+                       'BackgroundColor', darkPanelColor, ...
+                       'ForegroundColor', darkTextColor);
 
     % ==================== SETTINGS DISPLAY ====================
     % Recording Type (from output folder) display
@@ -669,6 +693,9 @@ uicontrol('Parent', controlPanel, ...
     catch ME
         addStatus(['ERROR creating folder: ' ME.message]);
     end
+
+    % ==================== APPLY DARK THEME TO ALL UI ELEMENTS ====================
+    applyDarkThemeToUI(fig, darkPanelColor, darkTextColor, darkButtonColor, darkButtonTextColor, darkEditColor, darkEditTextColor);
 end
     
     function loadLayerDictionary(src, ~)
@@ -14616,6 +14643,41 @@ function settingsPath = getSessionSettingsPathExternal()
     end
     settingsPath = fullfile(userDir, 'MEA_GUI_session_settings.json');
 end
+
+% ==================== DARK THEME HELPER FUNCTION ====================
+function applyDarkThemeToUI(hParent, darkPanelColor, darkTextColor, darkButtonColor, darkButtonTextColor, darkEditColor, darkEditTextColor)
+    % Rekursiv alle UI-Elemente unter hParent mit Dark Theme versehen
+    if ~ishandle(hParent), return; end
+    
+    % Alle Kinder von hParent durchgehen
+    children = get(hParent, 'Children');
+    for i = 1:length(children)
+        hChild = children(i);
+        
+        % Panels
+        if strcmp(get(hChild, 'Type'), 'uipanel')
+            set(hChild, 'BackgroundColor', darkPanelColor, 'ForegroundColor', darkTextColor);
+            applyDarkThemeToUI(hChild, darkPanelColor, darkTextColor, darkButtonColor, darkButtonTextColor, darkEditColor, darkEditTextColor);
+        
+        % Buttons
+        elseif strcmp(get(hChild, 'Type'), 'uicontrol')
+            style = get(hChild, 'Style');
+            switch style
+                case {'pushbutton', 'togglebutton'}
+                    set(hChild, 'BackgroundColor', darkButtonColor, 'ForegroundColor', darkButtonTextColor);
+                case {'edit', 'listbox'}
+                    set(hChild, 'BackgroundColor', darkEditColor, 'ForegroundColor', darkEditTextColor);
+                case {'text', 'checkbox', 'radiobutton', 'slider', 'popupmenu'}
+                    set(hChild, 'BackgroundColor', darkPanelColor, 'ForegroundColor', darkTextColor);
+            end
+        
+        % Achsen
+        elseif strcmp(get(hChild, 'Type'), 'axes')
+            set(hChild, 'Color', darkAxesColor, 'XColor', darkAxesTextColor, 'YColor', darkAxesTextColor, 'ZColor', darkAxesTextColor, 'GridColor', darkAxesTextColor);
+        end
+    end
+end
+
 function regionStr = cortexLayerName(val)
 % Map LayerDic integer value to cortical layer name
 switch val
