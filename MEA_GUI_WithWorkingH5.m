@@ -697,7 +697,7 @@ uicontrol('Parent', controlPanel, ...
     end
 
     % ==================== APPLY DARK THEME TO ALL UI ELEMENTS ====================
-    applyDarkThemeToUI(fig, darkPanelColor, darkTextColor, darkButtonColor, darkButtonTextColor, darkEditColor, darkEditTextColor);
+    applyDarkThemeToUI(fig, darkPanelColor, darkTextColor, darkButtonColor, darkButtonTextColor, darkEditColor, darkEditTextColor, darkAxesColor, darkAxesTextColor);
 end
     
     function loadLayerDictionary(src, ~)
@@ -5834,7 +5834,9 @@ close(hFig);
             };
             
             text(0.1, 0.5, summaryText, 'FontSize', 9, 'FontWeight', 'bold', ...
-                'VerticalAlignment', 'middle', 'FontName', 'FixedWidth');
+                'VerticalAlignment', 'middle', 'FontName', 'FixedWidth', ...
+              'BackgroundColor', darkPanelColor, ...
+              'ForegroundColor', [0.2 0.8 0.2]);
             
             print(hFig, fullfile(figuresFolder, 'Propagation_Summary.png'), '-dpng', '-r300');
             set(hFig, 'Visible', 'on');
@@ -12758,7 +12760,9 @@ function generateLatencyFigure(psthStats, responsiveChannels, figuresFolder)
     };
     
     text(0.1, 0.9, stats_text, 'VerticalAlignment', 'top', ...
-        'FontSize', 11, 'FontName', 'FixedWidth');
+        'FontSize', 11, 'FontName', 'FixedWidth', ...
+              'BackgroundColor', darkPanelColor, ...
+              'ForegroundColor', [0.2 0.8 0.2]);
     
     % Save
     sgtitle('Response Latency Analysis', 'FontSize', 14, 'FontWeight', 'bold');
@@ -12916,7 +12920,9 @@ function generateTriggeringFigure(triggerStats, evokedEventIndices, ...
     end
     
     text(0.1, 0.9, stats_text, 'VerticalAlignment', 'top', ...
-        'FontSize', 11, 'FontName', 'FixedWidth');
+        'FontSize', 11, 'FontName', 'FixedWidth', ...
+              'BackgroundColor', darkPanelColor, ...
+              'ForegroundColor', [0.2 0.8 0.2]);
     
     % Save
     sgtitle('Stimulation Event Triggering Analysis', 'FontSize', 14, 'FontWeight', 'bold');
@@ -13183,7 +13189,9 @@ function generateSpatialResponseFigure(psthStats, responsiveChannels, ...
     };
     
     text(0.1, 0.95, stats_text, 'VerticalAlignment', 'top', ...
-        'FontSize', 11, 'FontName', 'FixedWidth');
+        'FontSize', 11, 'FontName', 'FixedWidth', ...
+              'BackgroundColor', darkPanelColor, ...
+              'ForegroundColor', [0.2 0.8 0.2]);
     
     % Save
     sgtitle(sprintf('Spatial Response Map (AVERAGED) - Stim: %s', stimElectrode), ...
@@ -14647,7 +14655,7 @@ function settingsPath = getSessionSettingsPathExternal()
 end
 
 % ==================== DARK THEME HELPER FUNCTION ====================
-function applyDarkThemeToUI(hParent, darkPanelColor, darkTextColor, darkButtonColor, darkButtonTextColor, darkEditColor, darkEditTextColor)
+function applyDarkThemeToUI(hParent, darkPanelColor, darkTextColor, darkButtonColor, darkButtonTextColor, darkEditColor, darkEditTextColor, darkAxesColor, darkAxesTextColor)
     % Rekursiv alle UI-Elemente unter hParent mit Dark Theme versehen
     if ~ishandle(hParent), return; end
     
@@ -14659,7 +14667,7 @@ function applyDarkThemeToUI(hParent, darkPanelColor, darkTextColor, darkButtonCo
         % Panels
         if strcmp(get(hChild, 'Type'), 'uipanel')
             set(hChild, 'BackgroundColor', darkPanelColor, 'ForegroundColor', darkTextColor);
-            applyDarkThemeToUI(hChild, darkPanelColor, darkTextColor, darkButtonColor, darkButtonTextColor, darkEditColor, darkEditTextColor);
+            applyDarkThemeToUI(hChild, darkPanelColor, darkTextColor, darkButtonColor, darkButtonTextColor, darkEditColor, darkEditTextColor, darkAxesColor, darkAxesTextColor);
         
         % Buttons
         elseif strcmp(get(hChild, 'Type'), 'uicontrol')
