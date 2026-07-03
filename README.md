@@ -26,7 +26,7 @@ This repository contains **two separate MATLAB scripts** for Microelectrode Arra
 
 ---
 
-## \ud83d\udd39 2. **MEA_LFP_Analysis_Suite_Mai2026_V15.m** (LFP Analysis)
+## \ud83d\udd39 2. **MEA_LFP_Analysis_Suite.m** (LFP Analysis)
 - **Purpose:** Advanced **Local Field Potential (LFP) analysis** based on the events detected by `MEA_GUI_Spike_2026_July_V7.m`.
 - **Key Features:**
   - LFP signal processing
@@ -49,7 +49,7 @@ This repository contains **two separate MATLAB scripts** for Microelectrode Arra
 
 2. **Run LFP Analysis:**
    ```matlab
-   MEA_LFP_Analysis_Suite_Mai2026_V15
+   MEA_LFP_Analysis_Suite
    ```
    - Ensure the output from `MEA_GUI_Spike_2026_July_V7.m` is in the expected directory.
 
@@ -59,7 +59,7 @@ This repository contains **two separate MATLAB scripts** for Microelectrode Arra
 ```
 MEA_Version1/
 \u251c\u2500\u2500 MEA_GUI_Spike_2026_July_V7.m          # Basis: Event Detection (run first!)
-\u251c\u2500\u2500 MEA_LFP_Analysis_Suite_Mai2026_V15.m  # LFP Analysis (requires event data)
+\u251c\u2500\u2500 MEA_LFP_Analysis_Suite.m          # LFP Analysis (requires event data)
 \u2514\u2500\u2500 README.md                        # This file
 ```
 
