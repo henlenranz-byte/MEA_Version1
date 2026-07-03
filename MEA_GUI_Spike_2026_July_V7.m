@@ -1,51 +1,41 @@
 function MEA_GUI_Spike_2026_July_V7()
-    % MEA Analysis Suite - Complete Version with Event Detection
-    % 
-    % Created: 2025-10-08 by Henner Koch (supported by Claude)
-    % Modified: 2026_01_21 - Added Stimulation analysis
-    % Modified: 2026_01_23 - Added per-intensity spatial response maps for I/O protocols
-    % Modified: 2026_02_11 - V16: Session persistence + Settings display + Tools + HFO
-    %           - Added persistent settings (LayerDic, output folder, noisy channels)
-    %           - Added "Current Settings" display panel showing active configuration
-    %           - Removed IEI/Participation buttons (now auto-run after event detection)
-    %           - Auto-runs IEI and Participation analysis when 2+ events detected
-    %           - Recording_Type for database now taken directly from output folder name
-    %           - Added embedded tools: LayerDic Generator and Channel Inspector
-    %           - Added HFO Detection (Ripples 80-250Hz, Fast Ripples 250-500Hz)
-    % Modified: 2026_03_09 - V49: Improved Propagation Visualization
-    %           - Latency Map: percentile-normalized colormap (5th-95th), early=red, late=blue
-    %             Inactive electrodes shown as dark gray
-    %           - Wavefront Path: Added Initiator marker (yellow star) from latency map
-    %             COM trajectory shown separately (green->red), desaturated layer colors
-    %           - Velocity Distribution: excludes near-zero artifacts, cleaner annotations
-    % Modified: 2026_07_02 - V7 (MEA_GUI_Spike_2026_July_V7):
-    %           - Channel Inspector Aufruf auf V4 aktualisiert.
-    % Modified: 2026_07_02 - OLD_V6:
-    %           - Channel Inspector Aufruf auf V3 aktualisiert.
-    % Modified: 2026_07_02 - V5 (MEA_GUI_Spike_2026_July_V5):
-    %           - Bugfix Channel Inspector: Aufruf auf MEA_Channel_Inspector_2026_V4()
-    %             korrigiert (Dateiname muss Funktionsnamen entsprechen).
-    % Modified: 2026_07_02 - V4 (MEA_GUI_Spike_2026_July_V4):
-    %           - Channel Inspector: ruft jetzt MEA_Channel_Inspector() (Standalone)
-    %             auf statt eingebetteter Version. Fallback auf eingebettete Version
-    %             wenn Standalone nicht im MATLAB-Pfad gefunden.
-    %           - Export Master DB: uiputfile-Dialog zum Waehlen des Speicherorts.
-    %             Vorschlag: parentDir/MEA_Master_Database.xlsx (wie bisher).
-    % Modified: 2026_07_02 - V3 (MEA_GUI_Spike_2026_July_V3):
-    %           - Metadaten-Dialog: Noisy Channels Feld wird automatisch aus
-    %             noisy_channels.json vorausgefuellt (gleicher H5-Ordner).
-    %             Prioritaet: JSON > patientMeta > sessionSettings.
-    % Modified: 2026_07_02 - V2 (MEA_GUI_Spike_2026_July_V2):
-    %           - Bugfix: noisy_channels.json Auto-Load nutzt jetzt lokale
-    %             Variable h5FilePath statt getappdata (war noch nicht gesetzt
-    %             zum Zeitpunkt von Step 3 -- daher wurde immer der Dialog gezeigt).
-    %           - Debug-Status: zeigt gesuchten JSON-Pfad im Status-Panel.
-    % Modified: 2026_07_02 - V1 (MEA_GUI_Spike_2026_July_V1):
-    %             Format: {"noisy_channels":["A2","B3",...], "n_noisy":N, ...}
-    %             Erstellt vom Channel Inspector Tool. Fallback auf manuellen
-    %             inputdlg wenn JSON nicht gefunden oder nicht lesbar.
-    %           - Summary Panel: cleaner layout with integrated legend
+    % MEA_GUI_Spike_2026_July_V7 - GUI for Spike and Event Detection in MEA Recordings
     %
+    %   This GUI-based tool performs spike and event detection (bursts, HFOs, etc.)
+    %   in Microelectrode Array (MEA) recordings. It also supports stimulation analysis,
+    %   propagation visualization, and session persistence.
+    %
+    % Syntax:
+    %   MEA_GUI_Spike_2026_July_V7()
+    %
+    % Inputs:
+    %   None (interactive GUI)
+    %
+    % Outputs:
+    %   - Detected events (spikes, bursts, HFOs)
+    %   - Propagation maps (latency, wavefront, velocity)
+    %   - Session settings (LayerDic, output folder, noisy channels)
+    %   - Metadata for LFP analysis (used by MEA_LFP_Analysis_Suite_Mai2026_V15.m)
+    %
+    % Key Features:
+    %   - Event detection (spikes, bursts, HFOs: Ripples 80-250Hz, Fast Ripples 250-500Hz)
+    %   - Stimulation analysis and per-intensity spatial response maps
+    %   - Propagation visualization (latency maps, wavefront paths, velocity distribution)
+    %   - Session persistence (saves LayerDic, output folder, noisy channels)
+    %   - Embedded tools: LayerDic Generator, Channel Inspector
+    %   - Auto-runs IEI and Participation analysis when 2+ events are detected
+    %
+    % Dependencies:
+    %   - MATLAB (tested with R2023a and later)
+    %   - HDF5 support for .h5 file input
+    %   - Signal Processing Toolbox (recommended)
+    %
+    % Author:
+    %   Henner Koch
+    %
+    % See also:
+    %   MEA_LFP_Analysis_Suite_Mai2026_V15
+
     % Create main figure
     fig = figure('Name', 'MEA Analysis Suite - Complete Version', ...
                  'Position', [50, 50, 1400, 800], ...
